@@ -35,18 +35,25 @@ class ModelRepository(private val context: Context) {
 
     fun getInstalledModelPaths(model: LanguageModel): InstalledModelPaths? {
         val dir = File(modelsDir, model.id)
-        val modelFile = File(dir, "model.onnx")
-        val tokensFile = File(dir, "tokens.txt")
-        val dataDir = File(dir, "espeak-ng-data")
+        val modelFile = File(dir, "model.onnx").takeIf { it.exists() }
+            ?: findModelFile(dir)
+        val tokensFile = File(dir, "tokens.txt").takeIf { it.exists() }
+            ?: findTokensFile(dir)
+        val dataDir = File(dir, "espeak-ng-data").takeIf { it.exists() }
+            ?: findDataDir(dir)
 
-        if (!modelFile.exists() || !tokensFile.exists()) {
+        if (modelFile == null || tokensFile == null) {
             return null
         }
+
+        val metadataFile = File(dir, "model.onnx.json").takeIf { it.exists() }
+            ?: findMetadataFile(dir, modelFile)
 
         return InstalledModelPaths(
             modelFile = modelFile,
             tokensFile = tokensFile,
-            dataDir = if (dataDir.exists()) dataDir else null
+            dataDir = dataDir,
+            metadataFile = metadataFile
         )
     }
 
@@ -64,6 +71,7 @@ class ModelRepository(private val context: Context) {
         val archiveFile = File(context.cacheDir, "${model.id}.tar.bz2")
         downloadFile(model.archiveUrl, archiveFile, onProgress)
         extractModelArchive(archiveFile, targetDir)
+        normalizeModelLayout(targetDir)
 
         if (!isInstalled(model)) {
             throw IllegalStateException("Model package is missing required files")
@@ -164,6 +172,70 @@ class ModelRepository(private val context: Context) {
         unpackTemp.deleteRecursively()
     }
 
+    private fun normalizeModelLayout(targetDir: File) {
+        val discoveredModel = findModelFile(targetDir) ?: return
+        val discoveredTokens = findTokensFile(targetDir) ?: return
+
+        val canonicalModel = File(targetDir, "model.onnx")
+        if (!canonicalModel.exists()) {
+            discoveredModel.copyTo(canonicalModel, overwrite = true)
+        }
+
+        val canonicalTokens = File(targetDir, "tokens.txt")
+        if (!canonicalTokens.exists()) {
+            discoveredTokens.copyTo(canonicalTokens, overwrite = true)
+        }
+
+        val discoveredMetadata = findMetadataFile(targetDir, discoveredModel)
+        val canonicalMetadata = File(targetDir, "model.onnx.json")
+        if (!canonicalMetadata.exists() && discoveredMetadata != null) {
+            discoveredMetadata.copyTo(canonicalMetadata, overwrite = true)
+        }
+
+        val discoveredDataDir = findDataDir(targetDir)
+        val canonicalDataDir = File(targetDir, "espeak-ng-data")
+        if (!canonicalDataDir.exists() && discoveredDataDir != null && discoveredDataDir != canonicalDataDir) {
+            discoveredDataDir.copyRecursively(canonicalDataDir, overwrite = true)
+        }
+    }
+
+    private fun findModelFile(root: File): File? {
+        return root.walkTopDown().firstOrNull { file ->
+            file.isFile && file.extension == "onnx" && !file.name.endsWith(".onnx.json")
+        }
+    }
+
+    private fun findTokensFile(root: File): File? {
+        return root.walkTopDown().firstOrNull { file ->
+            file.isFile && file.name == "tokens.txt"
+        }
+    }
+
+    private fun findDataDir(root: File): File? {
+        return root.walkTopDown().firstOrNull { file ->
+            file.isDirectory && file.name == "espeak-ng-data"
+        }
+    }
+
+    private fun findMetadataFile(root: File, modelFile: File): File? {
+        val adjacent = File(modelFile.parentFile, "${modelFile.name}.json")
+        if (adjacent.exists()) {
+            return adjacent
+        }
+
+        return root.walkTopDown().firstOrNull { file ->
+            file.isFile && file.name.endsWith(".onnx.json")
+        }
+    }
+
+    fun saveLastSpeakerId(modelId: String, speakerId: Int) {
+        prefs.edit().putInt("speaker_$modelId", speakerId).apply()
+    }
+
+    fun loadLastSpeakerId(modelId: String): Int {
+        return prefs.getInt("speaker_$modelId", 0)
+    }
+
     companion object {
         private const val KEY_SELECTED_MODEL = "selected_model"
     }
@@ -172,5 +244,6 @@ class ModelRepository(private val context: Context) {
 data class InstalledModelPaths(
     val modelFile: File,
     val tokensFile: File,
-    val dataDir: File?
+    val dataDir: File?,
+    val metadataFile: File?
 )

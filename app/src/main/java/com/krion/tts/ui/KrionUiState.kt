@@ -15,13 +15,18 @@ data class ModelItemUi(
     val downloadProgress: Int = 0
 )
 
+data class LanguageFilterUi(
+    val id: String,
+    val label: String
+)
+
 data class KrionUiState(
     val currentPage: KrionPage = KrionPage.MAIN,
     val inputText: String = "Welcome to KrionTTS. This is an offline text to speech demo.",
     val speakerIdInput: String = "0",
     val maxSpeakerId: Int = 0,
-    val languageFilters: List<String> = listOf("All"),
-    val selectedLanguageFilter: String = "All",
+    val languageFilters: List<LanguageFilterUi> = listOf(LanguageFilterUi(id = "all", label = "All")),
+    val selectedLanguageFilterId: String = "all",
     val models: List<ModelItemUi> = emptyList(),
     val selectedModelId: String? = null,
     val isBusy: Boolean = false,

@@ -34,6 +34,10 @@ KrionTTS is a modern Android offline Text-to-Speech app built with Kotlin + Jetp
 ## Notes
 
 - The downloadable model catalog uses open-source sherpa-onnx TTS model archives and enforces one installed model per language.
+- The catalog includes MMS, Piper, and Coqui model families (depending on language availability).
+- Model extraction normalizes archive layouts so Piper/Coqui packages with non-canonical filenames can still install.
+- Multi-speaker options are included (for example Piper LibriTTS-R and Coqui VCTK for English).
+- The catalog is curated as multi-speaker-first per language; single-speaker models are kept only when no multi-speaker option is available for that language.
 - Current bundled language options include multiple model choices per supported language (English, Spanish, German, French, Russian, and Ukrainian), plus additional families such as Italian, Portuguese, Dutch, Turkish, Swedish, Indonesian, and Arabic; Thai is currently available via MMS.
 - Synthesis runs locally on-device through `sherpa-onnx-1.12.28.aar` (no cloud dependency after model download).
 - MP3 export converts generated WAV output through FFmpegKit.

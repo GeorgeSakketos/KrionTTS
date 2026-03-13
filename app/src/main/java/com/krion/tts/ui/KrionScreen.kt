@@ -28,6 +28,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -38,6 +39,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
@@ -47,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.text.KeyboardOptions
 import com.krion.tts.domain.DownloadState
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -162,13 +167,19 @@ private fun MainPage(uiState: KrionUiState, viewModel: KrionViewModel) {
                     Text("-")
                 }
 
+                // Track whether the field was ever focused so the initial
+                // onFocusChanged(isFocused=false) at first composition does not
+                // trigger a clamp before the TTS speaker count is known.
+                var speakerFieldWasFocused by remember { mutableStateOf(false) }
                 OutlinedTextField(
                     value = uiState.speakerIdInput,
                     onValueChange = viewModel::onSpeakerIdChanged,
                     modifier = Modifier
                         .weight(1f)
                         .onFocusChanged { focusState ->
-                            if (!focusState.isFocused) {
+                            if (focusState.isFocused) {
+                                speakerFieldWasFocused = true
+                            } else if (speakerFieldWasFocused) {
                                 viewModel.clampSpeakerIdInput()
                             }
                         },
@@ -275,7 +286,7 @@ private fun ModelsPage(uiState: KrionUiState, viewModel: KrionViewModel) {
     val downloadedModels = uiState.models.filter { it.state == DownloadState.INSTALLED }
     val filteredAvailableModels = uiState.models.filter { item ->
         (item.state != DownloadState.INSTALLED) &&
-        (uiState.selectedLanguageFilter == "All" || item.model.languageCode == uiState.selectedLanguageFilter)
+        (uiState.selectedLanguageFilterId == "all" || languageFamilyId(item.model.languageCode) == uiState.selectedLanguageFilterId)
     }
 
     LazyColumn(
@@ -293,9 +304,10 @@ private fun ModelsPage(uiState: KrionUiState, viewModel: KrionViewModel) {
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(uiState.languageFilters) { filter ->
-                    AssistChip(
-                        onClick = { viewModel.selectLanguageFilter(filter) },
-                        label = { Text(filter) }
+                    FilterChip(
+                        selected = uiState.selectedLanguageFilterId == filter.id,
+                        onClick = { viewModel.selectLanguageFilter(filter.id) },
+                        label = { Text(filter.label) }
                     )
                 }
             }
@@ -344,6 +356,11 @@ private fun ModelsPage(uiState: KrionUiState, viewModel: KrionViewModel) {
             )
         }
     }
+}
+
+private fun languageFamilyId(languageCode: String): String {
+    val locale = Locale.forLanguageTag(languageCode)
+    return locale.language.ifBlank { languageCode.lowercase() }
 }
 
 @Composable

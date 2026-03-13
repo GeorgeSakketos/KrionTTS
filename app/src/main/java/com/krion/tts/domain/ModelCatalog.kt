@@ -3,30 +3,21 @@ package com.krion.tts.domain
 object ModelCatalog {
     val models: List<LanguageModel> = listOf(
         LanguageModel(
-            id = "vits_mms_eng",
+            id = "vits_piper_en_us_libritts_r_medium",
             languageCode = "en-US",
             displayName = "English (US)",
-            modelName = "MMS English (VITS)",
-            description = "Open-source MMS voice model converted for sherpa-onnx.",
-            archiveUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-eng.tar.bz2",
+            modelName = "Piper LibriTTS-R Medium (VITS)",
+            description = "Piper English multi-speaker model (904 speakers).",
+            archiveUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-libritts_r-medium.tar.bz2",
             licenseUrl = "https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE"
         ),
         LanguageModel(
-            id = "vits_piper_en_us_lessac_medium",
+            id = "vits_coqui_en_vctk",
             languageCode = "en-US",
             displayName = "English (US)",
-            modelName = "Piper Lessac Medium (VITS)",
-            description = "Piper English (US) Lessac medium-quality offline voice model.",
-            archiveUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-lessac-medium.tar.bz2",
-            licenseUrl = "https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE"
-        ),
-        LanguageModel(
-            id = "vits_mms_spa",
-            languageCode = "es-ES",
-            displayName = "Spanish (Spain)",
-            modelName = "MMS Spanish (VITS)",
-            description = "Open-source MMS Spanish model for offline generation.",
-            archiveUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-spa.tar.bz2",
+            modelName = "Coqui VCTK (VITS)",
+            description = "Coqui English multi-speaker model (109 speakers).",
+            archiveUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-coqui-en-vctk.tar.bz2",
             licenseUrl = "https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE"
         ),
         LanguageModel(
@@ -39,30 +30,12 @@ object ModelCatalog {
             licenseUrl = "https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE"
         ),
         LanguageModel(
-            id = "vits_mms_deu",
-            languageCode = "de-DE",
-            displayName = "German (Germany)",
-            modelName = "MMS German (VITS)",
-            description = "Open-source MMS German model for offline generation.",
-            archiveUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-deu.tar.bz2",
-            licenseUrl = "https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE"
-        ),
-        LanguageModel(
             id = "vits_piper_de_de_thorsten_medium",
             languageCode = "de-DE",
             displayName = "German (Germany)",
             modelName = "Piper Thorsten Medium (VITS)",
             description = "Piper German medium-quality offline voice model.",
             archiveUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-de_DE-thorsten-medium.tar.bz2",
-            licenseUrl = "https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE"
-        ),
-        LanguageModel(
-            id = "vits_mms_fra",
-            languageCode = "fr-FR",
-            displayName = "French (France)",
-            modelName = "MMS French (VITS)",
-            description = "Open-source MMS French model for offline generation.",
-            archiveUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-fra.tar.bz2",
             licenseUrl = "https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE"
         ),
         LanguageModel(
@@ -75,30 +48,12 @@ object ModelCatalog {
             licenseUrl = "https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE"
         ),
         LanguageModel(
-            id = "vits_mms_rus",
-            languageCode = "ru-RU",
-            displayName = "Russian",
-            modelName = "MMS Russian (VITS)",
-            description = "Open-source MMS Russian model for offline generation.",
-            archiveUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-rus.tar.bz2",
-            licenseUrl = "https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE"
-        ),
-        LanguageModel(
             id = "vits_piper_ru_ru_ruslan_medium",
             languageCode = "ru-RU",
             displayName = "Russian",
             modelName = "Piper Ruslan Medium (VITS)",
             description = "Piper Russian medium-quality offline voice model.",
             archiveUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-ru_RU-ruslan-medium.tar.bz2",
-            licenseUrl = "https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE"
-        ),
-        LanguageModel(
-            id = "vits_mms_ukr",
-            languageCode = "uk-UA",
-            displayName = "Ukrainian",
-            modelName = "MMS Ukrainian (VITS)",
-            description = "Open-source MMS Ukrainian model for offline generation.",
-            archiveUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mms-ukr.tar.bz2",
             licenseUrl = "https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE"
         ),
         LanguageModel(

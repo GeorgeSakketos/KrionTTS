@@ -59,9 +59,20 @@ class OfflineTtsManager(context: Context) {
         currentModelId = model.id
     }
 
-    fun speakerCount(): Int {
-        val count = offlineTts?.numSpeakers() ?: 1
-        return if (count <= 0) 1 else count
+    fun speakerCount(installed: InstalledModelPaths? = null): Int {
+        val runtimeCount = offlineTts?.numSpeakers() ?: 1
+        val normalizedRuntimeCount = if (runtimeCount <= 0) 1 else runtimeCount
+
+        if (normalizedRuntimeCount > 1) {
+            return normalizedRuntimeCount
+        }
+
+        val metadataCount = speakerCountFromMetadata(installed?.metadataFile)
+        return metadataCount?.takeIf { it > 0 } ?: normalizedRuntimeCount
+    }
+
+    fun availableSpeakerCount(installed: InstalledModelPaths?): Int {
+        return speakerCountFromMetadata(installed?.metadataFile)?.takeIf { it > 0 } ?: 1
     }
 
     suspend fun speak(text: String, speakerId: Int): PlaybackEndReason = withContext(Dispatchers.IO) {
@@ -216,5 +227,16 @@ class OfflineTtsManager(context: Context) {
         offlineTts?.release()
         offlineTts = null
         currentModelId = null
+    }
+
+    private fun speakerCountFromMetadata(metadataFile: File?): Int? {
+        if (metadataFile == null || !metadataFile.exists()) {
+            return null
+        }
+
+        val text = runCatching { metadataFile.readText() }.getOrNull() ?: return null
+        val regex = Regex("\"(num_speakers|n_speakers)\"\\s*:\\s*(\\d+)")
+        val count = regex.find(text)?.groupValues?.getOrNull(2)?.toIntOrNull()
+        return count?.takeIf { it > 0 }
     }
 }

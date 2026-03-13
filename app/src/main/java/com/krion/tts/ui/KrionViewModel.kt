@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 class KrionViewModel(
     private val modelRepository: ModelRepository,
@@ -42,8 +43,8 @@ class KrionViewModel(
         _uiState.update { it.copy(currentPage = KrionPage.MAIN) }
     }
 
-    fun selectLanguageFilter(filter: String) {
-        _uiState.update { it.copy(selectedLanguageFilter = filter) }
+    fun selectLanguageFilter(filterId: String) {
+        _uiState.update { it.copy(selectedLanguageFilterId = filterId) }
     }
 
     fun onTextChanged(value: String) {
@@ -60,36 +61,49 @@ class KrionViewModel(
     }
 
     fun decrementSpeakerId() {
-        _uiState.update { state ->
-            val current = state.speakerIdInput.toIntOrNull() ?: 0
-            val next = (current - 1).coerceAtLeast(0)
-            state.copy(speakerIdInput = next.toString())
-        }
+        val current = _uiState.value.speakerIdInput.toIntOrNull() ?: 0
+        val next = (current - 1).coerceAtLeast(0)
+        _uiState.update { state -> state.copy(speakerIdInput = next.toString()) }
+        persistCurrentSpeakerId(next)
     }
 
     fun incrementSpeakerId() {
-        _uiState.update { state ->
-            val current = state.speakerIdInput.toIntOrNull() ?: 0
-            val next = (current + 1).coerceAtMost(state.maxSpeakerId)
-            state.copy(speakerIdInput = next.toString())
-        }
+        val current = _uiState.value.speakerIdInput.toIntOrNull() ?: 0
+        val next = (current + 1).coerceAtMost(_uiState.value.maxSpeakerId)
+        _uiState.update { state -> state.copy(speakerIdInput = next.toString()) }
+        persistCurrentSpeakerId(next)
     }
 
     fun downloadModel(modelId: String) {
         val model = ModelCatalog.models.firstOrNull { it.id == modelId } ?: return
+        val previouslySelectedModelId = modelRepository.selectedModelId()
 
         viewModelScope.launch {
+            val installedSameLanguageModel = _uiState.value.models.firstOrNull {
+                it.state == DownloadState.INSTALLED &&
+                    it.model.languageCode == model.languageCode &&
+                    it.model.id != model.id
+            }?.model
+
             updateModelState(modelId, DownloadState.DOWNLOADING, progress = 0)
             _uiState.update { it.copy(statusMessage = "Downloading ${model.modelName}...") }
 
             runCatching {
+                if (installedSameLanguageModel != null) {
+                    ttsManager.shutdown()
+                }
                 modelRepository.downloadModel(model) { progress ->
                     updateModelProgress(modelId, progress)
+                }
+
+                // If selection changes, force a clean TTS engine state so next play
+                // initializes against the new model files.
+                if (previouslySelectedModelId != model.id) {
+                    ttsManager.shutdown()
                 }
                 modelRepository.setSelectedModelId(model.id)
             }.onSuccess {
                 refreshModels()
-                refreshSpeakerInfo(model)
                 _uiState.update {
                     it.copy(statusMessage = "${model.displayName} model installed and selected")
                 }
@@ -109,9 +123,13 @@ class KrionViewModel(
             return
         }
 
+        val previouslySelectedModelId = modelRepository.selectedModelId()
+        if (previouslySelectedModelId != model.id) {
+            ttsManager.shutdown()
+        }
+
         modelRepository.setSelectedModelId(model.id)
         refreshModels()
-        refreshSpeakerInfo(model)
         _uiState.update { it.copy(statusMessage = "Selected ${model.displayName}") }
     }
 
@@ -303,26 +321,46 @@ class KrionViewModel(
     private fun resolveSpeakerId(): Int {
         val parsed = _uiState.value.speakerIdInput.toIntOrNull() ?: 0
         val max = _uiState.value.maxSpeakerId
+        // If maxSpeakerId is still 0 the TTS speaker count hasn't loaded yet
+        // (or this is a genuine single-speaker model). Either way, a coerceIn(0,0)
+        // would wrongly overwrite a restored non-zero speaker ID, so skip it.
+        if (max == 0) return parsed
         val clamped = parsed.coerceIn(0, max)
         if (clamped.toString() != _uiState.value.speakerIdInput) {
             _uiState.update { it.copy(speakerIdInput = clamped.toString()) }
         }
+        persistCurrentSpeakerId(clamped)
         return clamped
+    }
+
+    private fun persistCurrentSpeakerId(speakerId: Int? = null) {
+        val modelId = modelRepository.selectedModelId() ?: return
+        val id = speakerId ?: (_uiState.value.speakerIdInput.toIntOrNull() ?: 0)
+        modelRepository.saveLastSpeakerId(modelId, id)
     }
 
     private fun refreshSpeakerInfo(model: LanguageModel) {
         viewModelScope.launch {
             runCatching {
                 val paths = modelRepository.getInstalledModelPaths(model) ?: return@runCatching null
-                ttsManager.initialize(model, paths)
-                ttsManager.speakerCount()
+                ttsManager.availableSpeakerCount(paths)
             }.onSuccess { countOrNull ->
                 if (countOrNull != null) {
                     val maxSpeaker = (countOrNull - 1).coerceAtLeast(0)
-                    _uiState.update { state ->
-                        val current = state.speakerIdInput.toIntOrNull() ?: 0
-                        val clamped = current.coerceIn(0, maxSpeaker)
-                        state.copy(maxSpeakerId = maxSpeaker, speakerIdInput = clamped.toString())
+                    if (maxSpeaker > 0) {
+                        // Reliable multi-speaker count: restore persisted ID clamped to valid range.
+                        val saved = modelRepository.loadLastSpeakerId(model.id)
+                        val restored = saved.coerceIn(0, maxSpeaker)
+                        _uiState.update { state ->
+                            state.copy(maxSpeakerId = maxSpeaker, speakerIdInput = restored.toString())
+                        }
+                    } else {
+                        // Single-speaker or TTS reported an unexpected 0/1 count.
+                        // Only update maxSpeakerId; preserve whatever speakerIdInput
+                        // was already set (e.g. eagerly restored from prefs).
+                        _uiState.update { state ->
+                            state.copy(maxSpeakerId = maxSpeaker)
+                        }
                     }
                 }
             }
@@ -340,15 +378,40 @@ class KrionViewModel(
             )
         }
 
-        val filters = listOf("All") + items.map { it.model.languageCode }.distinct().sorted()
-        val selectedFilter = _uiState.value.selectedLanguageFilter.takeIf { it in filters } ?: "All"
+        val installedFamilyIds = items
+            .filter { it.state == DownloadState.INSTALLED }
+            .map { languageFamilyId(it.model.languageCode) }
+            .toSet()
+
+        val filters = listOf(LanguageFilterUi(id = "all", label = "All")) +
+            items
+                .map { it.model }
+                .groupBy { languageFamilyId(it.languageCode) }
+                .map { (familyId, modelsForFamily) ->
+                    val familyLabel = languageFamilyLabel(modelsForFamily.first().languageCode)
+                    LanguageFilterUi(id = familyId, label = familyLabel)
+                }
+                .sortedWith(
+                    compareByDescending<LanguageFilterUi> { it.id in installedFamilyIds }
+                        .thenBy { it.label }
+                )
+
+        val filterIds = filters.map { it.id }.toSet()
+        val selectedFilterId = _uiState.value.selectedLanguageFilterId
+            .takeIf { it in filterIds }
+            ?: "all"
+
+        // Eagerly restore the persisted speaker ID so it is visible immediately on
+        // startup, before the async TTS initialization in refreshSpeakerInfo completes.
+        val restoredSpeakerId = selected?.let { modelRepository.loadLastSpeakerId(it) } ?: 0
 
         _uiState.update {
             it.copy(
                 models = items,
                 selectedModelId = selected,
                 languageFilters = filters,
-                selectedLanguageFilter = selectedFilter
+                selectedLanguageFilterId = selectedFilterId,
+                speakerIdInput = restoredSpeakerId.toString()
             )
         }
 
@@ -376,6 +439,17 @@ class KrionViewModel(
                 }
             )
         }
+    }
+
+    private fun languageFamilyId(languageCode: String): String {
+        val locale = Locale.forLanguageTag(languageCode)
+        return locale.language.ifBlank { languageCode.lowercase() }
+    }
+
+    private fun languageFamilyLabel(languageCode: String): String {
+        val locale = Locale.forLanguageTag(languageCode)
+        val language = locale.getDisplayLanguage(Locale.ENGLISH)
+        return language.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ENGLISH) else it.toString() }
     }
 
     override fun onCleared() {
