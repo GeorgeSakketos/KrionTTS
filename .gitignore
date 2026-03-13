@@ -1,0 +1,39 @@
+# IntelliJ / Android Studio
+.idea/
+*.iml
+
+# Gradle
+.gradle/
+build/
+app/build/
+
+# Local machine config
+local.properties
+
+# Native build outputs
+.externalNativeBuild/
+.cxx/
+
+# Android captures
+captures/
+
+# OS files
+.DS_Store
+
+# Logs
+*.log
+
+# Signing keys and secrets
+*.jks
+*.keystore
+keystore.properties
+
+# Build artifacts
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# Crashlytics / Firebase config backups
+google-services.json.bak

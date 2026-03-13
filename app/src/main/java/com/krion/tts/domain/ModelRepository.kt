@@ -1,0 +1,176 @@
+package com.krion.tts.domain
+
+import android.content.Context
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
+import java.io.BufferedInputStream
+import java.io.File
+
+class ModelRepository(private val context: Context) {
+
+    private val client = OkHttpClient()
+    private val prefs = context.getSharedPreferences("krion_tts", Context.MODE_PRIVATE)
+    private val modelsDir = File(context.filesDir, "models")
+
+    init {
+        if (!modelsDir.exists()) {
+            modelsDir.mkdirs()
+        }
+    }
+
+    fun selectedModelId(): String? = prefs.getString(KEY_SELECTED_MODEL, null)
+
+    fun setSelectedModelId(modelId: String) {
+        prefs.edit().putString(KEY_SELECTED_MODEL, modelId).apply()
+    }
+
+    fun isInstalled(model: LanguageModel): Boolean {
+        return getInstalledModelPaths(model) != null
+    }
+
+    fun getInstalledModelPaths(model: LanguageModel): InstalledModelPaths? {
+        val dir = File(modelsDir, model.id)
+        val modelFile = File(dir, "model.onnx")
+        val tokensFile = File(dir, "tokens.txt")
+        val dataDir = File(dir, "espeak-ng-data")
+
+        if (!modelFile.exists() || !tokensFile.exists()) {
+            return null
+        }
+
+        return InstalledModelPaths(
+            modelFile = modelFile,
+            tokensFile = tokensFile,
+            dataDir = if (dataDir.exists()) dataDir else null
+        )
+    }
+
+    suspend fun downloadModel(
+        model: LanguageModel,
+        onProgress: (Int) -> Unit = {}
+    ) = withContext(Dispatchers.IO) {
+        onProgress(0)
+        removeOtherModelsForLanguage(model.languageCode, exceptId = model.id)
+
+        val targetDir = File(modelsDir, model.id)
+        targetDir.deleteRecursively()
+        targetDir.mkdirs()
+
+        val archiveFile = File(context.cacheDir, "${model.id}.tar.bz2")
+        downloadFile(model.archiveUrl, archiveFile, onProgress)
+        extractModelArchive(archiveFile, targetDir)
+
+        if (!isInstalled(model)) {
+            throw IllegalStateException("Model package is missing required files")
+        }
+
+        onProgress(100)
+    }
+
+    fun deleteModel(model: LanguageModel) {
+        val modelDir = File(modelsDir, model.id)
+        if (modelDir.exists()) {
+            modelDir.deleteRecursively()
+        }
+        // Clear selected model if it was the deleted one
+        if (selectedModelId() == model.id) {
+            prefs.edit().remove(KEY_SELECTED_MODEL).apply()
+        }
+    }
+
+    private fun removeOtherModelsForLanguage(languageCode: String, exceptId: String) {
+        modelsDir.listFiles()
+            ?.filter { it.isDirectory && it.name != exceptId }
+            ?.forEach { directory ->
+                val model = ModelCatalog.models.firstOrNull { it.id == directory.name }
+                if (model?.languageCode == languageCode) {
+                    directory.deleteRecursively()
+                }
+            }
+    }
+
+    private fun downloadFile(url: String, output: File, onProgress: (Int) -> Unit) {
+        val request = Request.Builder().url(url).build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IllegalStateException("Download failed: ${response.code}")
+            }
+
+            val body = response.body ?: throw IllegalStateException("Empty download body")
+            val totalBytes = body.contentLength()
+            var downloadedBytes = 0L
+            var lastProgress = -1
+
+            body.byteStream().use { input ->
+                output.outputStream().use { fileOutput ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read <= 0) break
+
+                        fileOutput.write(buffer, 0, read)
+                        downloadedBytes += read
+
+                        if (totalBytes > 0) {
+                            val progress = ((downloadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100)
+                            if (progress != lastProgress) {
+                                onProgress(progress)
+                                lastProgress = progress
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun extractModelArchive(archive: File, targetDir: File) {
+        val unpackTemp = File(context.cacheDir, "${targetDir.name}_unpack")
+        unpackTemp.deleteRecursively()
+        unpackTemp.mkdirs()
+
+        TarArchiveInputStream(
+            BZip2CompressorInputStream(
+                BufferedInputStream(archive.inputStream())
+            )
+        ).use { tarInput ->
+            var entry = tarInput.nextTarEntry
+            while (entry != null) {
+                val outFile = File(unpackTemp, entry.name)
+
+                if (entry.isDirectory) {
+                    outFile.mkdirs()
+                } else {
+                    outFile.parentFile?.mkdirs()
+                    outFile.outputStream().use { output ->
+                        tarInput.copyTo(output)
+                    }
+                }
+
+                entry = tarInput.nextTarEntry
+            }
+        }
+
+        val root = unpackTemp.listFiles()?.firstOrNull { it.isDirectory } ?: unpackTemp
+        root.listFiles()?.forEach { child ->
+            child.copyRecursively(File(targetDir, child.name), overwrite = true)
+        }
+
+        unpackTemp.deleteRecursively()
+    }
+
+    companion object {
+        private const val KEY_SELECTED_MODEL = "selected_model"
+    }
+}
+
+data class InstalledModelPaths(
+    val modelFile: File,
+    val tokensFile: File,
+    val dataDir: File?
+)
