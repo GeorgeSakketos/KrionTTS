@@ -76,11 +76,6 @@ class KrionViewModel(
 
     fun downloadModel(modelId: String) {
         val model = ModelCatalog.models.firstOrNull { it.id == modelId } ?: return
-        val hasInstalledSameLanguageModel = ModelCatalog.models.any {
-            it.languageCode == model.languageCode &&
-                it.id != model.id &&
-                modelRepository.isInstalled(it)
-        }
 
         viewModelScope.launch {
             updateModelState(modelId, DownloadState.DOWNLOADING, progress = 0)
@@ -102,15 +97,10 @@ class KrionViewModel(
             }.onSuccess {
                 refreshModels()
                 _uiState.update {
-                    val restartMessage = if (hasInstalledSameLanguageModel) {
-                        "${model.displayName} installed. Please restart the app before using this language model."
-                    } else {
-                        "${model.displayName} model installed and selected"
-                    }
                     it.copy(
                         isBusy = false,
-                        showRestartPrompt = hasInstalledSameLanguageModel,
-                        statusMessage = restartMessage
+                        autoRestartRequested = true,
+                        statusMessage = "${model.displayName} model installed. Restarting app..."
                     )
                 }
             }.onFailure { error ->
@@ -118,16 +108,12 @@ class KrionViewModel(
                 _uiState.update { state ->
                     state.copy(
                         isBusy = false,
-                        showRestartPrompt = false,
+                        autoRestartRequested = false,
                         statusMessage = "Download failed: ${error.message}"
                     )
                 }
             }
         }
-    }
-
-    fun dismissRestartPrompt() {
-        _uiState.update { it.copy(showRestartPrompt = false) }
     }
 
     fun selectModel(modelId: String) {

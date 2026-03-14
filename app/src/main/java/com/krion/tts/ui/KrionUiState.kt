@@ -32,6 +32,6 @@ data class KrionUiState(
     val isBusy: Boolean = false,
     val isPlaying: Boolean = false,
     val isPaused: Boolean = false,
-    val showRestartPrompt: Boolean = false,
+    val autoRestartRequested: Boolean = false,
     val statusMessage: String = "Select a language model and generate audio."
 )

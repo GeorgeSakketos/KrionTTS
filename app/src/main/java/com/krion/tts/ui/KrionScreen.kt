@@ -27,7 +27,6 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -42,6 +41,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,6 +65,12 @@ import java.util.Locale
 fun KrionScreen(viewModel: KrionViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    LaunchedEffect(uiState.autoRestartRequested) {
+        if (uiState.autoRestartRequested) {
+            restartApp(context)
+        }
+    }
 
     BackHandler(enabled = uiState.currentPage == KrionPage.MODELS) {
         viewModel.closeModelsPage()
@@ -120,30 +126,6 @@ fun KrionScreen(viewModel: KrionViewModel) {
                 )
             }
 
-            if (uiState.showRestartPrompt) {
-                AlertDialog(
-                    onDismissRequest = viewModel::dismissRestartPrompt,
-                    title = { Text("Restart Required") },
-                    text = {
-                        Text("A model for this language was replaced. Press Restart app to apply it cleanly.")
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                viewModel.dismissRestartPrompt()
-                                restartApp(context)
-                            }
-                        ) {
-                            Text("Restart app")
-                        }
-                    },
-                    dismissButton = {
-                        Button(onClick = viewModel::dismissRestartPrompt) {
-                            Text("Later")
-                        }
-                    }
-                )
-            }
         }
     }
 }
