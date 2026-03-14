@@ -76,41 +76,44 @@ class KrionViewModel(
 
     fun downloadModel(modelId: String) {
         val model = ModelCatalog.models.firstOrNull { it.id == modelId } ?: return
-        val previouslySelectedModelId = modelRepository.selectedModelId()
 
         viewModelScope.launch {
-            val installedSameLanguageModel = _uiState.value.models.firstOrNull {
-                it.state == DownloadState.INSTALLED &&
-                    it.model.languageCode == model.languageCode &&
-                    it.model.id != model.id
-            }?.model
-
             updateModelState(modelId, DownloadState.DOWNLOADING, progress = 0)
-            _uiState.update { it.copy(statusMessage = "Downloading ${model.modelName}...") }
+            _uiState.update {
+                it.copy(
+                    isBusy = true,
+                    isPlaying = false,
+                    isPaused = false,
+                    statusMessage = "Downloading ${model.modelName}..."
+                )
+            }
 
             runCatching {
-                if (installedSameLanguageModel != null) {
-                    ttsManager.shutdown()
-                }
+                // Always reset TTS before installing/replacing model files.
+                // This prevents stale native state from the previous model,
+                // especially when swapping models of the same language.
+                ttsManager.shutdown()
+
                 modelRepository.downloadModel(model) { progress ->
                     updateModelProgress(modelId, progress)
                 }
-
-                // If selection changes, force a clean TTS engine state so next play
-                // initializes against the new model files.
-                if (previouslySelectedModelId != model.id) {
-                    ttsManager.shutdown()
-                }
+                modelRepository.saveLastSpeakerId(model.id, defaultSpeakerIdForModel(model.id))
                 modelRepository.setSelectedModelId(model.id)
             }.onSuccess {
                 refreshModels()
                 _uiState.update {
-                    it.copy(statusMessage = "${model.displayName} model installed and selected")
+                    it.copy(
+                        isBusy = false,
+                        statusMessage = "${model.displayName} model installed and selected"
+                    )
                 }
             }.onFailure { error ->
                 updateModelState(modelId, DownloadState.FAILED, progress = 0)
                 _uiState.update { state ->
-                    state.copy(statusMessage = "Download failed: ${error.message}")
+                    state.copy(
+                        isBusy = false,
+                        statusMessage = "Download failed: ${error.message}"
+                    )
                 }
             }
         }
@@ -153,7 +156,8 @@ class KrionViewModel(
                 val paths = modelRepository.getInstalledModelPaths(selected)
                     ?: throw IllegalStateException("Selected model is not installed")
                 ttsManager.initialize(selected, paths)
-                val speakerId = resolveSpeakerId()
+                val maxSpeaker = (ttsManager.speakerCount(paths) - 1).coerceAtLeast(0)
+                val speakerId = resolveSpeakerIdForModel(selected.id, maxSpeaker)
                 Log.d(TAG, "Setting state to playing, calling speak()")
                 _uiState.update { it.copy(isBusy = false, isPlaying = true, isPaused = false, statusMessage = "Playing audio...") }
                 ttsManager.speak(state.inputText, speakerId)
@@ -252,7 +256,8 @@ class KrionViewModel(
                 val paths = modelRepository.getInstalledModelPaths(selected)
                     ?: throw IllegalStateException("Selected model is not installed")
                 ttsManager.initialize(selected, paths)
-                val speakerId = resolveSpeakerId()
+                val maxSpeaker = (ttsManager.speakerCount(paths) - 1).coerceAtLeast(0)
+                val speakerId = resolveSpeakerIdForModel(selected.id, maxSpeaker)
                 val wavFile = ttsManager.synthesizeToWav(state.inputText, speakerId)
 
                 audioExporter.exportToUri(wavFile, uri, isMp3)
@@ -297,7 +302,8 @@ class KrionViewModel(
                 val paths = modelRepository.getInstalledModelPaths(selected)
                     ?: throw IllegalStateException("Selected model is not installed")
                 ttsManager.initialize(selected, paths)
-                val speakerId = resolveSpeakerId()
+                val maxSpeaker = (ttsManager.speakerCount(paths) - 1).coerceAtLeast(0)
+                val speakerId = resolveSpeakerIdForModel(selected.id, maxSpeaker)
                 val wavFile = ttsManager.synthesizeToWav(state.inputText, speakerId)
                 val fileName = "krion_${selected.languageCode}_${System.currentTimeMillis()}"
 
@@ -333,6 +339,17 @@ class KrionViewModel(
         return clamped
     }
 
+    private fun resolveSpeakerIdForModel(modelId: String, maxSpeakerId: Int): Int {
+        val parsed = _uiState.value.speakerIdInput.toIntOrNull() ?: 0
+        val clamped = parsed.coerceIn(0, maxSpeakerId)
+        val adjusted = if (isCoquiModel(modelId) && maxSpeakerId > 0 && clamped == 0) 1 else clamped
+        _uiState.update {
+            it.copy(maxSpeakerId = maxSpeakerId, speakerIdInput = adjusted.toString())
+        }
+        modelRepository.saveLastSpeakerId(modelId, adjusted)
+        return adjusted
+    }
+
     private fun persistCurrentSpeakerId(speakerId: Int? = null) {
         val modelId = modelRepository.selectedModelId() ?: return
         val id = speakerId ?: (_uiState.value.speakerIdInput.toIntOrNull() ?: 0)
@@ -350,7 +367,8 @@ class KrionViewModel(
                     if (maxSpeaker > 0) {
                         // Reliable multi-speaker count: restore persisted ID clamped to valid range.
                         val saved = modelRepository.loadLastSpeakerId(model.id)
-                        val restored = saved.coerceIn(0, maxSpeaker)
+                        val default = defaultSpeakerIdForModel(model.id).coerceIn(0, maxSpeaker)
+                        val restored = (if (saved == 0 && default > 0) default else saved).coerceIn(0, maxSpeaker)
                         _uiState.update { state ->
                             state.copy(maxSpeakerId = maxSpeaker, speakerIdInput = restored.toString())
                         }
@@ -419,6 +437,14 @@ class KrionViewModel(
         if (selectedModel != null && modelRepository.isInstalled(selectedModel)) {
             refreshSpeakerInfo(selectedModel)
         }
+    }
+
+    private fun defaultSpeakerIdForModel(modelId: String): Int {
+        return if (isCoquiModel(modelId)) 1 else 0
+    }
+
+    private fun isCoquiModel(modelId: String): Boolean {
+        return modelId.contains("coqui", ignoreCase = true)
     }
 
     private fun updateModelState(modelId: String, state: DownloadState, progress: Int) {

@@ -85,6 +85,7 @@ class ModelRepository(private val context: Context) {
         if (modelDir.exists()) {
             modelDir.deleteRecursively()
         }
+        prefs.edit().remove(speakerKey(model.id)).apply()
         // Clear selected model if it was the deleted one
         if (selectedModelId() == model.id) {
             prefs.edit().remove(KEY_SELECTED_MODEL).apply()
@@ -97,6 +98,10 @@ class ModelRepository(private val context: Context) {
             ?.forEach { directory ->
                 val model = ModelCatalog.models.firstOrNull { it.id == directory.name }
                 if (model?.languageCode == languageCode) {
+                    if (selectedModelId() == directory.name) {
+                        prefs.edit().remove(KEY_SELECTED_MODEL).apply()
+                    }
+                    prefs.edit().remove(speakerKey(directory.name)).apply()
                     directory.deleteRecursively()
                 }
             }
@@ -223,18 +228,25 @@ class ModelRepository(private val context: Context) {
             return adjacent
         }
 
+        val adjacentConfig = File(modelFile.parentFile, "config.json")
+        if (adjacentConfig.exists()) {
+            return adjacentConfig
+        }
+
         return root.walkTopDown().firstOrNull { file ->
-            file.isFile && file.name.endsWith(".onnx.json")
+            file.isFile && (file.name.endsWith(".onnx.json") || file.name == "config.json")
         }
     }
 
     fun saveLastSpeakerId(modelId: String, speakerId: Int) {
-        prefs.edit().putInt("speaker_$modelId", speakerId).apply()
+        prefs.edit().putInt(speakerKey(modelId), speakerId).apply()
     }
 
     fun loadLastSpeakerId(modelId: String): Int {
-        return prefs.getInt("speaker_$modelId", 0)
+        return prefs.getInt(speakerKey(modelId), 0)
     }
+
+    private fun speakerKey(modelId: String): String = "speaker_$modelId"
 
     companion object {
         private const val KEY_SELECTED_MODEL = "selected_model"
