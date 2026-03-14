@@ -1,5 +1,6 @@
 package com.krion.tts.ui
 
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -53,6 +55,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.platform.LocalContext
 import com.krion.tts.R
 import com.krion.tts.domain.DownloadState
 import java.util.Locale
@@ -61,6 +64,7 @@ import java.util.Locale
 @Composable
 fun KrionScreen(viewModel: KrionViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     BackHandler(enabled = uiState.currentPage == KrionPage.MODELS) {
         viewModel.closeModelsPage()
@@ -115,7 +119,44 @@ fun KrionScreen(viewModel: KrionViewModel) {
                         .padding(16.dp)
                 )
             }
+
+            if (uiState.showRestartPrompt) {
+                AlertDialog(
+                    onDismissRequest = viewModel::dismissRestartPrompt,
+                    title = { Text("Restart Required") },
+                    text = {
+                        Text("A model for this language was replaced. Press Restart app to apply it cleanly.")
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                viewModel.dismissRestartPrompt()
+                                restartApp(context)
+                            }
+                        ) {
+                            Text("Restart app")
+                        }
+                    },
+                    dismissButton = {
+                        Button(onClick = viewModel::dismissRestartPrompt) {
+                            Text("Later")
+                        }
+                    }
+                )
+            }
         }
+    }
+}
+
+private fun restartApp(context: android.content.Context) {
+    val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        ?.apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        }
+
+    if (intent != null) {
+        context.startActivity(intent)
+        Runtime.getRuntime().exit(0)
     }
 }
 

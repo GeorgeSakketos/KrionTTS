@@ -32,10 +32,6 @@ class OfflineTtsManager(context: Context) {
     companion object {
         private const val TAG = "OfflineTtsManager"
         private const val PLAYBACK_TIMEOUT_MS = 300000L // 5 minutes max
-        private const val MIN_WAV_BYTES = 1024L
-        private const val WAV_HEADER_BYTES = 44
-        private const val WAV_AUDIBLE_PEAK_THRESHOLD = 120
-        private const val WAV_ANALYSIS_MAX_BYTES = 512 * 1024
     }
 
     suspend fun initialize(model: LanguageModel, installed: InstalledModelPaths) = withContext(Dispatchers.IO) {
@@ -84,11 +80,10 @@ class OfflineTtsManager(context: Context) {
 
     suspend fun speak(text: String, speakerId: Int): PlaybackEndReason = withContext(Dispatchers.IO) {
         Log.d(TAG, "speak() called - generating audio")
+        val tts = synchronized(engineLock) { offlineTts } ?: throw IllegalStateException("TTS model is not initialized")
         val output = File(appContext.cacheDir, "krion_play_${System.currentTimeMillis()}.wav")
-        val saved = synchronized(engineLock) {
-            val tts = offlineTts ?: throw IllegalStateException("TTS model is not initialized")
-            generateToFile(tts, text, speakerId, output)
-        }
+        val audio = tts.generate(text = text, sid = speakerId, speed = 1.0f)
+        val saved = audio.save(output.absolutePath)
         if (!saved) {
             throw IllegalStateException("Failed to generate audio for playback")
         }
@@ -103,11 +98,10 @@ class OfflineTtsManager(context: Context) {
     }
 
     suspend fun synthesizeToWav(text: String, speakerId: Int): File = withContext(Dispatchers.IO) {
+        val tts = synchronized(engineLock) { offlineTts } ?: throw IllegalStateException("TTS model is not initialized")
         val output = File(appContext.cacheDir, "krion_${System.currentTimeMillis()}.wav")
-        val saved = synchronized(engineLock) {
-            val tts = offlineTts ?: throw IllegalStateException("TTS model is not initialized")
-            generateToFile(tts, text, speakerId, output)
-        }
+        val audio = tts.generate(text = text, sid = speakerId, speed = 1.0f)
+        val saved = audio.save(output.absolutePath)
         if (!saved) {
             throw IllegalStateException("Failed to generate audio file")
         }
@@ -278,99 +272,4 @@ class OfflineTtsManager(context: Context) {
         return counts.maxOrNull()
     }
 
-    private fun generateToFile(tts: OfflineTts, text: String, speakerId: Int, output: File): Boolean {
-        val expectedMinBytes = (WAV_HEADER_BYTES + text.length * 200L).coerceAtLeast(MIN_WAV_BYTES)
-
-        fun attempt(sid: Int): Boolean {
-            val saved = tts.generate(text = text, sid = sid, speed = 1.0f).save(output.absolutePath)
-            if (!saved) return false
-
-            val size = output.length()
-            if (size <= MIN_WAV_BYTES) {
-                Log.w(TAG, "Generated wav too small with speakerId=$sid, size=$size")
-                return false
-            }
-
-            val audible = isLikelyAudibleWav(output)
-            if (!audible) {
-                Log.w(TAG, "Generated wav appears silent with speakerId=$sid, size=$size")
-                return false
-            }
-
-            if (size < expectedMinBytes) {
-                Log.w(
-                    TAG,
-                    "Generated wav is shorter than expected but audible with speakerId=$sid, size=$size, expectedMin=$expectedMinBytes"
-                )
-            } else {
-                Log.d(TAG, "Generated wav check speakerId=$sid size=$size audible=$audible")
-            }
-            return true
-        }
-
-        if (attempt(speakerId)) {
-            return true
-        }
-
-        Log.w(TAG, "Retrying generation with same speakerId=$speakerId (warm-up retry)")
-        if (attempt(speakerId)) {
-            return true
-        }
-
-        if (speakerId != 0) {
-            Log.w(TAG, "Retrying generation with fallback speakerId=0")
-            if (attempt(0)) {
-                return true
-            }
-        }
-
-        if (speakerId != 1) {
-            Log.w(TAG, "Retrying generation with fallback speakerId=1")
-            if (attempt(1)) {
-                return true
-            }
-        }
-
-        return false
-    }
-
-    private fun isLikelyAudibleWav(file: File): Boolean {
-        if (!file.exists() || file.length() <= WAV_HEADER_BYTES) {
-            return false
-        }
-
-        val maxRead = minOf(WAV_ANALYSIS_MAX_BYTES.toLong(), file.length() - WAV_HEADER_BYTES).toInt()
-        if (maxRead <= 1) {
-            return false
-        }
-
-        val buffer = ByteArray(maxRead)
-        val read = file.inputStream().use { input ->
-            val skipped = input.skip(WAV_HEADER_BYTES.toLong())
-            if (skipped < WAV_HEADER_BYTES) return false
-            input.read(buffer)
-        }
-        if (read <= 1) {
-            return false
-        }
-
-        var peak = 0
-        var index = 0
-        while (index + 1 < read) {
-            val lo = buffer[index].toInt() and 0xFF
-            val hi = buffer[index + 1].toInt()
-            val sample = (hi shl 8) or lo
-            val abs = kotlin.math.abs(sample.toShort().toInt())
-            if (abs > peak) {
-                peak = abs
-                if (peak >= WAV_AUDIBLE_PEAK_THRESHOLD) {
-                    return true
-                }
-            }
-            index += 2
-        }
-
-        Log.w(TAG, "Generated wav appears near-silent (peak=$peak)")
-        return false
-    }
 }

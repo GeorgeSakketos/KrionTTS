@@ -76,6 +76,11 @@ class KrionViewModel(
 
     fun downloadModel(modelId: String) {
         val model = ModelCatalog.models.firstOrNull { it.id == modelId } ?: return
+        val hasInstalledSameLanguageModel = ModelCatalog.models.any {
+            it.languageCode == model.languageCode &&
+                it.id != model.id &&
+                modelRepository.isInstalled(it)
+        }
 
         viewModelScope.launch {
             updateModelState(modelId, DownloadState.DOWNLOADING, progress = 0)
@@ -89,22 +94,23 @@ class KrionViewModel(
             }
 
             runCatching {
-                // Always reset TTS before installing/replacing model files.
-                // This prevents stale native state from the previous model,
-                // especially when swapping models of the same language.
-                ttsManager.shutdown()
-
                 modelRepository.downloadModel(model) { progress ->
                     updateModelProgress(modelId, progress)
                 }
-                modelRepository.saveLastSpeakerId(model.id, defaultSpeakerIdForModel(model.id))
+                modelRepository.saveLastSpeakerId(model.id, 0)
                 modelRepository.setSelectedModelId(model.id)
             }.onSuccess {
                 refreshModels()
                 _uiState.update {
+                    val restartMessage = if (hasInstalledSameLanguageModel) {
+                        "${model.displayName} installed. Please restart the app before using this language model."
+                    } else {
+                        "${model.displayName} model installed and selected"
+                    }
                     it.copy(
                         isBusy = false,
-                        statusMessage = "${model.displayName} model installed and selected"
+                        showRestartPrompt = hasInstalledSameLanguageModel,
+                        statusMessage = restartMessage
                     )
                 }
             }.onFailure { error ->
@@ -112,6 +118,7 @@ class KrionViewModel(
                 _uiState.update { state ->
                     state.copy(
                         isBusy = false,
+                        showRestartPrompt = false,
                         statusMessage = "Download failed: ${error.message}"
                     )
                 }
@@ -119,16 +126,15 @@ class KrionViewModel(
         }
     }
 
+    fun dismissRestartPrompt() {
+        _uiState.update { it.copy(showRestartPrompt = false) }
+    }
+
     fun selectModel(modelId: String) {
         val model = ModelCatalog.models.firstOrNull { it.id == modelId } ?: return
         if (!modelRepository.isInstalled(model)) {
             _uiState.update { it.copy(statusMessage = "Download this model first") }
             return
-        }
-
-        val previouslySelectedModelId = modelRepository.selectedModelId()
-        if (previouslySelectedModelId != model.id) {
-            ttsManager.shutdown()
         }
 
         modelRepository.setSelectedModelId(model.id)
@@ -342,12 +348,11 @@ class KrionViewModel(
     private fun resolveSpeakerIdForModel(modelId: String, maxSpeakerId: Int): Int {
         val parsed = _uiState.value.speakerIdInput.toIntOrNull() ?: 0
         val clamped = parsed.coerceIn(0, maxSpeakerId)
-        val adjusted = if (isCoquiModel(modelId) && maxSpeakerId > 0 && clamped == 0) 1 else clamped
         _uiState.update {
-            it.copy(maxSpeakerId = maxSpeakerId, speakerIdInput = adjusted.toString())
+            it.copy(maxSpeakerId = maxSpeakerId, speakerIdInput = clamped.toString())
         }
-        modelRepository.saveLastSpeakerId(modelId, adjusted)
-        return adjusted
+        modelRepository.saveLastSpeakerId(modelId, clamped)
+        return clamped
     }
 
     private fun persistCurrentSpeakerId(speakerId: Int? = null) {
@@ -367,8 +372,7 @@ class KrionViewModel(
                     if (maxSpeaker > 0) {
                         // Reliable multi-speaker count: restore persisted ID clamped to valid range.
                         val saved = modelRepository.loadLastSpeakerId(model.id)
-                        val default = defaultSpeakerIdForModel(model.id).coerceIn(0, maxSpeaker)
-                        val restored = (if (saved == 0 && default > 0) default else saved).coerceIn(0, maxSpeaker)
+                        val restored = if (isCoquiModel(model.id)) 0 else saved.coerceIn(0, maxSpeaker)
                         _uiState.update { state ->
                             state.copy(maxSpeakerId = maxSpeaker, speakerIdInput = restored.toString())
                         }
@@ -421,7 +425,9 @@ class KrionViewModel(
 
         // Eagerly restore the persisted speaker ID so it is visible immediately on
         // startup, before the async TTS initialization in refreshSpeakerInfo completes.
-        val restoredSpeakerId = selected?.let { modelRepository.loadLastSpeakerId(it) } ?: 0
+        val restoredSpeakerId = selected?.let {
+            if (isCoquiModel(it)) 0 else modelRepository.loadLastSpeakerId(it)
+        } ?: 0
 
         _uiState.update {
             it.copy(
@@ -437,14 +443,6 @@ class KrionViewModel(
         if (selectedModel != null && modelRepository.isInstalled(selectedModel)) {
             refreshSpeakerInfo(selectedModel)
         }
-    }
-
-    private fun defaultSpeakerIdForModel(modelId: String): Int {
-        return if (isCoquiModel(modelId)) 1 else 0
-    }
-
-    private fun isCoquiModel(modelId: String): Boolean {
-        return modelId.contains("coqui", ignoreCase = true)
     }
 
     private fun updateModelState(modelId: String, state: DownloadState, progress: Int) {
@@ -476,6 +474,10 @@ class KrionViewModel(
         val locale = Locale.forLanguageTag(languageCode)
         val language = locale.getDisplayLanguage(Locale.ENGLISH)
         return language.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ENGLISH) else it.toString() }
+    }
+
+    private fun isCoquiModel(modelId: String): Boolean {
+        return modelId.contains("coqui", ignoreCase = true)
     }
 
     override fun onCleared() {
