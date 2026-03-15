@@ -20,15 +20,16 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Save
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -38,8 +39,13 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -65,6 +72,12 @@ import java.util.Locale
 fun KrionScreen(viewModel: KrionViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val isDarkTheme = when (uiState.themeOption) {
+        ThemeOption.SYSTEM -> isSystemInDarkTheme()
+        ThemeOption.LIGHT -> false
+        ThemeOption.DARK -> true
+    }
+    val appColorScheme = if (isDarkTheme) darkColorScheme() else lightColorScheme()
 
     LaunchedEffect(uiState.autoRestartRequested) {
         if (uiState.autoRestartRequested) {
@@ -72,60 +85,74 @@ fun KrionScreen(viewModel: KrionViewModel) {
         }
     }
 
-    BackHandler(enabled = uiState.currentPage == KrionPage.MODELS) {
-        viewModel.closeModelsPage()
+    BackHandler(enabled = uiState.currentPage != KrionPage.MAIN) {
+        viewModel.closeSubPage()
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    if (uiState.currentPage == KrionPage.MODELS) {
-                        Text("Models")
-                    } else {
-                        Image(
-                            painter = painterResource(id = R.drawable.header_logo),
-                            contentDescription = "KrionTTS logo",
-                            modifier = Modifier.height(28.dp)
-                        )
-                    }
-                },
-                navigationIcon = {
-                    if (uiState.currentPage == KrionPage.MODELS) {
-                        IconButton(onClick = viewModel::closeModelsPage) {
-                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+    MaterialTheme(colorScheme = appColorScheme) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        when (uiState.currentPage) {
+                            KrionPage.MODELS -> Text("Models")
+                            KrionPage.SETTINGS -> Text("Settings")
+                            KrionPage.MAIN -> Image(
+                                painter = painterResource(id = R.drawable.header_logo),
+                                contentDescription = "KrionTTS logo",
+                                modifier = Modifier.height(28.dp)
+                            )
                         }
-                    }
-                },
-                actions = {
-                    if (uiState.currentPage == KrionPage.MAIN) {
-                        IconButton(onClick = viewModel::openModelsPage) {
-                            Icon(Icons.Rounded.Download, contentDescription = "Download models")
+                    },
+                    navigationIcon = {
+                        if (uiState.currentPage != KrionPage.MAIN) {
+                            IconButton(onClick = viewModel::closeSubPage) {
+                                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                            }
                         }
-                    }
-                }
-            )
-        }
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            if (uiState.currentPage == KrionPage.MAIN) {
-                MainPage(uiState = uiState, viewModel = viewModel)
-            } else {
-                ModelsPage(uiState = uiState, viewModel = viewModel)
-            }
+                    },
+                    actions = {
+                        if (uiState.currentPage == KrionPage.MAIN) {
+                            IconButton(onClick = viewModel::openModelsPage) {
+                                Icon(Icons.Rounded.Download, contentDescription = "Download models")
+                            }
+                        }
 
-            if (uiState.isBusy) {
-                CircularProgressIndicator(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(16.dp)
+                        IconButton(onClick = viewModel::openSettingsPage) {
+                            Icon(Icons.Rounded.Settings, contentDescription = "Theme settings")
+                        }
+                    }
                 )
             }
+        ) { paddingValues ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                when (uiState.currentPage) {
+                    KrionPage.MAIN -> MainPage(uiState = uiState, viewModel = viewModel)
+                    KrionPage.MODELS -> ModelsPage(uiState = uiState, viewModel = viewModel)
+                    KrionPage.SETTINGS -> SettingsPage(uiState = uiState, viewModel = viewModel)
+                }
 
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (uiState.isBusy) {
+                        CircularProgressIndicator()
+                    }
+                    Text(
+                        text = "Made with Love, by Zenith",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+            }
         }
     }
 }
@@ -390,6 +417,102 @@ private fun ModelsPage(uiState: KrionUiState, viewModel: KrionViewModel) {
                 onDelete = { viewModel.deleteModel(item.model.id) }
             )
         }
+    }
+}
+
+@Composable
+private fun SettingsPage(uiState: KrionUiState, viewModel: KrionViewModel) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "Appearance",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Choose how KrionTTS looks across the app.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
+
+        item {
+            Card {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Theme mode",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        ThemeOption.entries.forEachIndexed { index, option ->
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(
+                                    index = index,
+                                    count = ThemeOption.entries.size
+                                ),
+                                onClick = { viewModel.setThemeOption(option) },
+                                selected = uiState.themeOption == option,
+                                label = {
+                                    Text(
+                                        text = when (option) {
+                                            ThemeOption.SYSTEM -> "System"
+                                            ThemeOption.LIGHT -> "Light"
+                                            ThemeOption.DARK -> "Dark"
+                                        }
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            )
+            {
+                Text(
+                    text = "Active: ${themeOptionLabel(uiState.themeOption)}",
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
+}
+
+private fun themeOptionLabel(themeOption: ThemeOption): String {
+    return when (themeOption) {
+        ThemeOption.SYSTEM -> "System default"
+        ThemeOption.LIGHT -> "Light"
+        ThemeOption.DARK -> "Dark"
     }
 }
 

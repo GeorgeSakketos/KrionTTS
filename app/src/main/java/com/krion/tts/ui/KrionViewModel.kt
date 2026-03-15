@@ -39,8 +39,20 @@ class KrionViewModel(
         _uiState.update { it.copy(currentPage = KrionPage.MODELS) }
     }
 
+    fun openSettingsPage() {
+        _uiState.update { it.copy(currentPage = KrionPage.SETTINGS) }
+    }
+
     fun closeModelsPage() {
         _uiState.update { it.copy(currentPage = KrionPage.MAIN) }
+    }
+
+    fun closeSubPage() {
+        _uiState.update { it.copy(currentPage = KrionPage.MAIN) }
+    }
+
+    fun setThemeOption(themeOption: ThemeOption) {
+        _uiState.update { it.copy(themeOption = themeOption) }
     }
 
     fun selectLanguageFilter(filterId: String) {
