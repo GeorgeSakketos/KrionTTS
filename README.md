@@ -1,6 +1,6 @@
 # KrionTTS
 
-[![Alpha Release](https://img.shields.io/badge/alpha-2026--03--14-orange)](https://github.com/GeorgeSakketos/KrionTTS/releases/tag/alpha-2026-03-14)
+[![Release](https://img.shields.io/badge/release-v0.1-blue)](https://github.com/GeorgeSakketos/KrionTTS/releases/tag/v0.1)
 ![Platform](https://img.shields.io/badge/platform-Android-3DDC84)
 ![Min SDK](https://img.shields.io/badge/minSdk-26-blue)
 ![Target SDK](https://img.shields.io/badge/targetSdk-35-blueviolet)
@@ -80,14 +80,12 @@ Generated APKs are placed under app/build/outputs/apk.
 
 ## Release Notes 📦
 
-### Alpha Channel
+### Stable Channel
 
-The current alpha pre-release is published on GitHub Releases:
+Version 0.1 release:
 
-- Release page: https://github.com/GeorgeSakketos/KrionTTS/releases/tag/alpha-2026-03-14
-- APK: https://github.com/GeorgeSakketos/KrionTTS/releases/download/alpha-2026-03-14/KrionTTS-alpha-2026-03-14.apk
-
-Note: the alpha APK is intended for testing.
+- Release page: https://github.com/GeorgeSakketos/KrionTTS/releases/tag/v0.1
+- APK: https://github.com/GeorgeSakketos/KrionTTS/releases/download/v0.1/KrionTTS-v0.1.apk
 
 ## Model & Runtime Notes 📚
 
