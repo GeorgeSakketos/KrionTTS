@@ -6,7 +6,8 @@ import com.krion.tts.domain.LanguageModel
 enum class KrionPage {
     MAIN,
     MODELS,
-    SETTINGS
+    SETTINGS,
+    LEGAL
 }
 
 enum class ThemeOption {
@@ -30,6 +31,8 @@ data class LanguageFilterUi(
 data class KrionUiState(
     val currentPage: KrionPage = KrionPage.MAIN,
     val themeOption: ThemeOption = ThemeOption.SYSTEM,
+    val showFirstLaunchModelNotice: Boolean = false,
+    val showLegalNotice: Boolean = false,
     val inputText: String = "Welcome to KrionTTS. This is an offline text to speech demo.",
     val speakerIdInput: String = "0",
     val maxSpeakerId: Int = 0,

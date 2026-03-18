@@ -5,7 +5,7 @@
 ![Min SDK](https://img.shields.io/badge/minSdk-26-blue)
 ![Target SDK](https://img.shields.io/badge/targetSdk-35-blueviolet)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.0.x-7F52FF)
-![License](https://img.shields.io/badge/license-not%20specified-lightgrey)
+![License](https://img.shields.io/badge/legal-included-brightgreen)
 
 > Offline Text-to-Speech for Android, powered by sherpa-onnx and built with Kotlin + Jetpack Compose.
 
@@ -97,7 +97,15 @@ Note: the alpha APK is intended for testing.
 - Speaker preferences are persisted per installed model.
 - Internet permission is used for model downloads only.
 
-## License
+## Legal & Compliance
 
-This repository currently does not define a license file.
-If you plan to distribute or accept external contributions, adding a license is strongly recommended.
+- Privacy policy: PRIVACY_POLICY.md
+- Terms of use: TERMS_OF_USE.md
+- Third-party notices: THIRD_PARTY_NOTICES.md
+- In-app legal access: Settings -> Legal
+
+### Release checklist (store distribution)
+
+- Publish the privacy policy URL in the app store listing.
+- Complete the store Data Safety form based on actual release behavior.
+- Re-verify dependency/model licenses for the exact shipped versions.

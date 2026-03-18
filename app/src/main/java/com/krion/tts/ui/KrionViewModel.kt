@@ -33,6 +33,35 @@ class KrionViewModel(
 
     init {
         refreshModels()
+        val hasInstalledModel = ModelCatalog.models.any { modelRepository.isInstalled(it) }
+        val showLegalNotice = modelRepository.shouldShowLegalNotice()
+
+        if (showLegalNotice) {
+            _uiState.update { it.copy(showLegalNotice = true) }
+        }
+
+        if (!hasInstalledModel) {
+            if (modelRepository.shouldShowFirstLaunchModelNotice()) {
+                modelRepository.markFirstLaunchModelNoticeShown()
+            }
+            _uiState.update {
+                it.copy(
+                    showFirstLaunchModelNotice = true,
+                    statusMessage = "To use KrionTTS, download a language model first."
+                )
+            }
+        } else if (modelRepository.shouldShowFirstLaunchModelNotice()) {
+            modelRepository.markFirstLaunchModelNoticeShown()
+        }
+    }
+
+    fun dismissFirstLaunchModelNotice() {
+        _uiState.update { it.copy(showFirstLaunchModelNotice = false) }
+    }
+
+    fun acknowledgeLegalNotice() {
+        modelRepository.markLegalNoticeAccepted()
+        _uiState.update { it.copy(showLegalNotice = false) }
     }
 
     fun openModelsPage() {
@@ -41,6 +70,10 @@ class KrionViewModel(
 
     fun openSettingsPage() {
         _uiState.update { it.copy(currentPage = KrionPage.SETTINGS) }
+    }
+
+    fun openLegalPage() {
+        _uiState.update { it.copy(currentPage = KrionPage.LEGAL) }
     }
 
     fun closeModelsPage() {

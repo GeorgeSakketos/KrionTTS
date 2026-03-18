@@ -246,10 +246,28 @@ class ModelRepository(private val context: Context) {
         return prefs.getInt(speakerKey(modelId), 0)
     }
 
+    fun shouldShowFirstLaunchModelNotice(): Boolean {
+        return !prefs.getBoolean(KEY_FIRST_LAUNCH_MODEL_NOTICE_SHOWN, false)
+    }
+
+    fun markFirstLaunchModelNoticeShown() {
+        prefs.edit().putBoolean(KEY_FIRST_LAUNCH_MODEL_NOTICE_SHOWN, true).apply()
+    }
+
+    fun shouldShowLegalNotice(): Boolean {
+        return !prefs.getBoolean(KEY_LEGAL_NOTICE_ACCEPTED, false)
+    }
+
+    fun markLegalNoticeAccepted() {
+        prefs.edit().putBoolean(KEY_LEGAL_NOTICE_ACCEPTED, true).apply()
+    }
+
     private fun speakerKey(modelId: String): String = "speaker_$modelId"
 
     companion object {
         private const val KEY_SELECTED_MODEL = "selected_model"
+        private const val KEY_FIRST_LAUNCH_MODEL_NOTICE_SHOWN = "first_launch_model_notice_shown"
+        private const val KEY_LEGAL_NOTICE_ACCEPTED = "legal_notice_accepted"
     }
 }
 

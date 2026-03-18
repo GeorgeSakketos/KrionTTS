@@ -1,4 +1,4 @@
-name: Build and Publish Alpha Pre-Release
+name: Build and Publish Beta Pre-Release
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: alpha-prerelease-main
+  group: beta-prerelease-main
   cancel-in-progress: false
 
 jobs:
@@ -36,7 +36,7 @@ jobs:
 
       - name: Prepare tag and APK name
         run: |
-          TAG="alpha-$(date -u +'%Y-%m-%d-%H%M%S')-${GITHUB_SHA::7}"
+          TAG="beta-$(date -u +'%Y-%m-%d-%H%M%S')-${GITHUB_SHA::7}"
           APK_NAME="KrionTTS-${TAG}.apk"
           cp app/build/outputs/apk/release/app-release-unsigned.apk "app/build/outputs/apk/release/${APK_NAME}"
 
@@ -47,11 +47,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
-          name: Alpha Release ${{ env.TAG }}
+          name: Beta Release ${{ env.TAG }}
           prerelease: true
           generate_release_notes: true
           body: |
-            Automated alpha pre-release from commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
+            Automated beta pre-release from commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
           files: |
             app/build/outputs/apk/release/${{ env.APK_NAME }}
         env:
