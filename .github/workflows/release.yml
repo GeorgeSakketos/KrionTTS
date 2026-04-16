@@ -49,8 +49,24 @@ jobs:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           KEYSTORE_PATH="$RUNNER_TEMP/release.keystore"
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+
+          # Strip whitespace to avoid copy/paste wrapping issues in stored secret values.
+          CLEAN_BASE64=$(printf "%s" "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]')
+          printf "%s" "$CLEAN_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+
+          test -s "$KEYSTORE_PATH" || (echo "Decoded keystore file is empty" && exit 1)
+
           echo "ANDROID_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+
+      - name: Validate decoded keystore and alias
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          keytool -list -v \
+            -keystore "$ANDROID_KEYSTORE_PATH" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -alias "$ANDROID_KEY_ALIAS" > /dev/null
 
       - name: Build release APK
         env:
