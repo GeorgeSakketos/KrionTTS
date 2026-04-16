@@ -1,6 +1,9 @@
 name: Build and Publish Release
 
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
@@ -56,11 +59,27 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew :app:assembleRelease
 
+      - name: Verify signed APK
+        run: |
+          APK_PATH="app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK_PATH" || (echo "Signed APK not found at $APK_PATH" && exit 1)
+
+          APKSIGNER_PATH=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          test -n "$APKSIGNER_PATH" || (echo "apksigner was not found in Android build-tools" && exit 1)
+
+          "$APKSIGNER_PATH" verify --verbose --print-certs "$APK_PATH"
+
       - name: Prepare release metadata
         id: prepare
         run: |
-          VERSION="${{ github.event.inputs.version }}"
-          TAG="v${VERSION}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"
+            VERSION="${TAG#v}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+            TAG="v${VERSION}"
+          fi
+
           APK_NAME="KrionTTS-${TAG}.apk"
           cp app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/${APK_NAME}"
 
