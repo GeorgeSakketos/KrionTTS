@@ -63,10 +63,27 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          keytool -list -v \
+          set -e
+
+          if ! keytool -list \
+            -keystore "$ANDROID_KEYSTORE_PATH" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" > /tmp/keystore-list.txt 2>/tmp/keystore-error.txt; then
+            echo "Failed to open keystore. Check ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD."
+            cat /tmp/keystore-error.txt
+            exit 1
+          fi
+
+          if ! keytool -list \
             -keystore "$ANDROID_KEYSTORE_PATH" \
             -storepass "$ANDROID_KEYSTORE_PASSWORD" \
-            -alias "$ANDROID_KEY_ALIAS" > /dev/null
+            -alias "$ANDROID_KEY_ALIAS" > /dev/null 2>&1; then
+            echo "Alias '$ANDROID_KEY_ALIAS' not found in keystore."
+            echo "Available aliases:"
+            cat /tmp/keystore-list.txt
+            exit 1
+          fi
+
+          echo "Keystore and alias validation passed."
 
       - name: Build release APK
         env:
