@@ -31,28 +31,96 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
+      - name: Validate release signing secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64" || (echo "Missing secret: ANDROID_KEYSTORE_BASE64" && exit 1)
+          test -n "$ANDROID_KEYSTORE_PASSWORD" || (echo "Missing secret: ANDROID_KEYSTORE_PASSWORD" && exit 1)
+          test -n "$ANDROID_KEY_ALIAS" || (echo "Missing secret: ANDROID_KEY_ALIAS" && exit 1)
+          test -n "$ANDROID_KEY_PASSWORD" || (echo "Missing secret: ANDROID_KEY_PASSWORD" && exit 1)
+
+      - name: Decode Android keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          KEYSTORE_PATH="$RUNNER_TEMP/release.keystore"
+
+          # Strip whitespace to avoid copy/paste wrapping issues in stored secret values.
+          CLEAN_BASE64=$(printf "%s" "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]')
+          printf "%s" "$CLEAN_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+
+          test -s "$KEYSTORE_PATH" || (echo "Decoded keystore file is empty" && exit 1)
+
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+
+      - name: Validate decoded keystore and alias
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -e
+
+          if ! keytool -list \
+            -keystore "$ANDROID_KEYSTORE_PATH" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" > /tmp/keystore-list.txt 2>/tmp/keystore-error.txt; then
+            echo "Failed to open keystore. Check ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD."
+            cat /tmp/keystore-error.txt
+            exit 1
+          fi
+
+          if ! keytool -list \
+            -keystore "$ANDROID_KEYSTORE_PATH" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -alias "$ANDROID_KEY_ALIAS" > /dev/null 2>&1; then
+            echo "Alias '$ANDROID_KEY_ALIAS' not found in keystore."
+            echo "Available aliases:"
+            cat /tmp/keystore-list.txt
+            exit 1
+          fi
+
+          echo "Keystore and alias validation passed."
+
       - name: Build release APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew :app:assembleRelease
 
+      - name: Verify signed APK
+        run: |
+          APK_PATH="app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK_PATH" || (echo "Signed APK not found at $APK_PATH" && exit 1)
+
+          APKSIGNER_PATH=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          test -n "$APKSIGNER_PATH" || (echo "apksigner was not found in Android build-tools" && exit 1)
+
+          "$APKSIGNER_PATH" verify --verbose --print-certs "$APK_PATH"
+
       - name: Prepare tag and APK name
+        id: prepare
         run: |
           TAG="beta-$(date -u +'%Y-%m-%d-%H%M%S')-${GITHUB_SHA::7}"
           APK_NAME="KrionTTS-${TAG}.apk"
-          cp app/build/outputs/apk/release/app-release-unsigned.apk "app/build/outputs/apk/release/${APK_NAME}"
+          cp app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/${APK_NAME}"
 
-          echo "TAG=${TAG}" >> "$GITHUB_ENV"
-          echo "APK_NAME=${APK_NAME}" >> "$GITHUB_ENV"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "apk_name=${APK_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub pre-release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.TAG }}
-          name: Beta Release ${{ env.TAG }}
+          tag_name: ${{ steps.prepare.outputs.tag }}
+          name: Beta Release ${{ steps.prepare.outputs.tag }}
           prerelease: true
           generate_release_notes: true
           body: |
             Automated beta pre-release from commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
           files: |
-            app/build/outputs/apk/release/${{ env.APK_NAME }}
+            app/build/outputs/apk/release/${{ steps.prepare.outputs.apk_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
