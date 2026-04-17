@@ -2,6 +2,7 @@ package com.krion.tts.ui
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -85,6 +86,15 @@ fun KrionScreen(viewModel: KrionViewModel) {
     LaunchedEffect(uiState.autoRestartRequested) {
         if (uiState.autoRestartRequested) {
             restartApp(context)
+        }
+    }
+
+    LaunchedEffect(uiState.statusMessage) {
+        val message = uiState.statusMessage
+        val isInstallSuccessMessage = message.endsWith(" model installed.") ||
+            message.endsWith(" model installed and selected.")
+        if (isInstallSuccessMessage) {
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
 

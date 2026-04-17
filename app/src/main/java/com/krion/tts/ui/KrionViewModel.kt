@@ -121,6 +121,9 @@ class KrionViewModel(
 
     fun downloadModel(modelId: String) {
         val model = ModelCatalog.models.firstOrNull { it.id == modelId } ?: return
+        val hadOtherInstalledModels = ModelCatalog.models.any { candidate ->
+            candidate.id != model.id && modelRepository.isInstalled(candidate)
+        }
 
         viewModelScope.launch {
             updateModelState(modelId, DownloadState.DOWNLOADING, progress = 0)
@@ -138,14 +141,20 @@ class KrionViewModel(
                     updateModelProgress(modelId, progress)
                 }
                 modelRepository.saveLastSpeakerId(model.id, 0)
-                modelRepository.setSelectedModelId(model.id)
+                if (!hadOtherInstalledModels) {
+                    modelRepository.setSelectedModelId(model.id)
+                }
             }.onSuccess {
                 refreshModels()
                 _uiState.update {
                     it.copy(
                         isBusy = false,
-                        autoRestartRequested = true,
-                        statusMessage = "${model.displayName} model installed. Restarting app..."
+                        autoRestartRequested = false,
+                        statusMessage = if (!hadOtherInstalledModels) {
+                            "${model.displayName} model installed and selected."
+                        } else {
+                            "${model.displayName} model installed."
+                        }
                     )
                 }
             }.onFailure { error ->
